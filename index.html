@@ -1,0 +1,1793 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- iOS / iPad Web App Optimization -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="おばけサーチャー">
+    
+    <title>おばけサーチャー - iPad Edition</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MediaPipe FaceMesh & Camera Utils -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700;900&display=swap');
+        
+        * {
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        }
+
+        /* Neon Glow Effects */
+        .glow-text-cyan {
+            text-shadow: 0 0 12px rgba(6, 182, 212, 0.8), 0 0 24px rgba(6, 182, 212, 0.4);
+        }
+        .glow-text-purple {
+            text-shadow: 0 0 12px rgba(168, 85, 247, 0.8), 0 0 24px rgba(168, 85, 247, 0.4);
+        }
+        .glow-text-amber {
+            text-shadow: 0 0 12px rgba(245, 158, 11, 0.8), 0 0 24px rgba(245, 158, 11, 0.4);
+        }
+        .glow-box-cyan {
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.4), inset 0 0 15px rgba(6, 182, 212, 0.2);
+        }
+
+        /* iPad Optimized Range Slider Thumb */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 28px;
+            width: 28px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.9);
+            margin-top: -10px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #020617;
+            border-radius: 4px;
+            border: 1px solid #1e293b;
+        }
+
+        /* Custom Scrollbar for Sidebar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(51, 65, 85, 0.9);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 overflow-hidden w-screen h-screen">
+
+    <div id="app" class="relative w-full h-full flex overflow-hidden">
+        
+        <!-- Hidden Video for Webcam capture -->
+        <video id="webcam" class="hidden" autoplay playsinline muted></video>
+
+        <!-- Main Game Canvas -->
+        <canvas id="gameCanvas" class="absolute inset-0 w-full h-full object-cover z-0"></canvas>
+
+        <!-- Top Right Quick Toggle Bar -->
+        <div class="absolute top-4 right-4 z-40 flex items-center gap-2">
+            <button id="btnToggleSidebar" class="bg-slate-900/90 hover:bg-slate-800 active:bg-slate-700 text-slate-100 border border-slate-700/80 px-5 py-3.5 rounded-2xl text-sm sm:text-base font-bold backdrop-blur flex items-center gap-3 shadow-2xl transition active:scale-95">
+                <i class="fa-solid fa-sliders text-cyan-400 text-lg"></i>
+                <span>設定 (Backspace)</span>
+                <i id="toggleIcon" class="fa-solid fa-chevron-right text-slate-400 transition-transform duration-300"></i>
+            </button>
+        </div>
+
+        <div id="titleScreen" class="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md transition-opacity duration-500 p-6 sm:p-10 cursor-pointer overflow-y-auto">
+            <div class="max-w-3xl w-full bg-slate-900/95 border border-cyan-500/40 rounded-3xl p-8 sm:p-12 text-center shadow-2xl relative overflow-hidden glow-box-cyan my-auto">
+                <div class="absolute -top-8 -left-8 text-8xl sm:text-9xl text-cyan-500/10 pointer-events-none"><i class="fa-solid fa-ghost"></i></div>
+                <div class="absolute -bottom-8 -right-8 text-8xl sm:text-9xl text-purple-500/10 pointer-events-none"><i class="fa-solid fa-ghost"></i></div>
+
+                <span class="inline-block px-5 py-2 rounded-full text-xs sm:text-sm font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 mb-4">
+                    <i class="fa-solid fa-universal-access mr-2"></i> 顔の向き & 声であそべるバリアフリーARゲーム
+                </span>
+
+                <h1 class="text-4xl sm:text-6xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-teal-200 to-purple-400 mb-3 glow-text-cyan">
+                    おばけサーチャー
+                </h1>
+                <p class="text-sm sm:text-lg text-slate-300 mb-8 font-medium">
+                    暗闇の中に潜むおばけをライトで照らして退治しよう！
+                </p>
+
+                <!-- Rules for iPad -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8 text-left text-xs sm:text-sm">
+                    <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800/80 flex flex-col gap-1.5 shadow-inner">
+                        <span class="text-cyan-400 font-bold flex items-center gap-2 text-sm sm:text-base"><i class="fa-solid fa-face-smile text-lg"></i> 顔 / タッチ操作</span>
+                        <span class="text-slate-300 leading-relaxed">顔を傾けた方向へライトが移動。画面直接タッチなぞりもOK！</span>
+                    </div>
+                    <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800/80 flex flex-col gap-1.5 shadow-inner">
+                        <span class="text-amber-400 font-bold flex items-center gap-2 text-sm sm:text-base"><i class="fa-solid fa-sun text-lg"></i> 1秒照射で退治</span>
+                        <span class="text-slate-300 leading-relaxed">おばけをライトに納めると退治！サーチ中は一瞬で即撃破！</span>
+                    </div>
+                    <div class="bg-slate-950/80 p-4 rounded-2xl border border-slate-800/80 flex flex-col gap-1.5 shadow-inner">
+                        <span class="text-purple-400 font-bold flex items-center gap-2 text-sm sm:text-base"><i class="fa-solid fa-microphone text-lg"></i> 声でサーチ！</span>
+                        <span class="text-slate-300 leading-relaxed">ゲージ満タンで声を出すと波紋発生！隠れたおばけが束縛・固定！</span>
+                    </div>
+                </div>
+
+                <!-- Start Button for iPad Touch -->
+                <div class="relative inline-block group my-2 w-full sm:w-auto">
+                    <button id="btnStartGame" class="relative z-10 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-lg sm:text-2xl px-10 py-5 sm:px-14 sm:py-6 rounded-2xl shadow-xl shadow-cyan-500/30 transition transform active:scale-95 flex items-center justify-center gap-4 w-full sm:w-auto">
+                        <i class="fa-solid fa-play text-xl sm:text-3xl"></i>
+                        <span>ゲームスタート (タップ / スペース)</span>
+                    </button>
+                    <div id="hoverProgressContainer_start" class="absolute inset-0 rounded-2xl border-4 border-cyan-400/0 pointer-events-none transition-all">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            <circle id="hoverCircle_start" cx="50" cy="50" r="46" fill="none" stroke="#06b6d4" stroke-width="8" stroke-dasharray="289" stroke-dashoffset="289" stroke-linecap="round" class="transition-all duration-75"></circle>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="mt-5 text-xs sm:text-sm text-slate-400 flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-hand-pointer text-cyan-400"></i>
+                    <span>画面全体タップ、またはライトをボタンに2秒重ねてもスタートできます</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="countdownScreen" class="hidden absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/70 backdrop-blur-md">
+            <span class="text-slate-200 font-bold text-2xl sm:text-3xl mb-3">まもなくスタート！</span>
+            <div id="countdownNumber" class="text-9xl sm:text-[11rem] font-black text-cyan-400 glow-text-cyan animate-bounce">
+                3
+            </div>
+        </div>
+
+        <div id="gameUi" class="hidden absolute inset-0 z-20 pointer-events-none flex flex-col p-4 sm:p-8 gap-4">
+            <div class="flex flex-row justify-between items-center gap-4 w-full max-w-7xl mx-auto">
+                <!-- Score Display -->
+                <div class="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md px-5 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-2xl flex items-center gap-4 pointer-events-auto shrink-0">
+                    <div class="w-12 h-12 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-2xl font-bold">
+                        <i class="fa-solid fa-trophy"></i>
+                    </div>
+                    <div>
+                        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Score</div>
+                        <div id="scoreDisplay" class="text-3xl sm:text-4xl font-black text-amber-300 tracking-wider">000</div>
+                    </div>
+                </div>
+
+                <!-- Top Search Gauge Bar -->
+                <div class="w-full max-w-md sm:max-w-xl bg-slate-900/90 border border-cyan-500/50 backdrop-blur-md p-3.5 px-5 rounded-2xl shadow-2xl pointer-events-auto flex flex-col gap-1.5">
+                    <div class="flex justify-between items-center text-xs sm:text-sm font-bold">
+                        <span class="text-cyan-400 flex items-center gap-2">
+                            <i class="fa-solid fa-wifi text-base animate-pulse"></i>
+                            <span>サーチゲージ (退治でチャージ)</span>
+                        </span>
+                        <span id="gaugePercentageText" class="text-cyan-300 font-mono text-sm sm:text-base">0%</span>
+                    </div>
+                    
+                    <div class="w-full h-5 bg-slate-950 rounded-xl overflow-hidden p-0.5 border border-slate-800 relative">
+                        <div id="searchProgressBar" class="h-full bg-gradient-to-r from-blue-600 via-cyan-400 to-teal-300 rounded-lg transition-all duration-150 w-0 shadow-lg shadow-cyan-500/50"></div>
+                    </div>
+
+                    <div id="searchStatusText" class="text-center text-xs sm:text-sm font-bold text-slate-400 transition-colors">
+                        ゲージ蓄積中...
+                    </div>
+                </div>
+
+                <!-- Timer Display -->
+                <div class="bg-slate-900/90 border border-slate-700/80 backdrop-blur-md px-5 py-3 sm:px-6 sm:py-4 rounded-2xl shadow-2xl flex items-center gap-4 pointer-events-auto shrink-0">
+                    <div class="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-2xl font-bold">
+                        <i id="timerIcon" class="fa-solid fa-stopwatch"></i>
+                    </div>
+                    <div>
+                        <div class="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Time Left</div>
+                        <div id="timerDisplay" class="text-3xl sm:text-4xl font-black text-cyan-300 tracking-wider">60s</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultScreen" class="hidden absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/85 backdrop-blur-md p-6 sm:p-10 cursor-pointer overflow-y-auto">
+            <div class="max-w-lg w-full bg-slate-900/95 border border-purple-500/40 rounded-3xl p-8 sm:p-10 text-center shadow-2xl relative overflow-hidden my-auto">
+                <span class="inline-block px-4 py-2 rounded-full text-xs sm:text-sm font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 mb-3">
+                    <i class="fa-solid fa-flag-checkered mr-1.5"></i> タイムアップ！
+                </span>
+
+                <h2 class="text-3xl sm:text-4xl font-black text-slate-100 mb-2">リザルト</h2>
+                
+                <div class="text-5xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-500 my-4 glow-text-amber">
+                    <span id="finalScore">0</span> <span class="text-2xl text-slate-300">pt</span>
+                </div>
+
+                <!-- HighScore Section -->
+                <div class="inline-flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 px-4 py-2 rounded-2xl mb-6">
+                    <i class="fa-solid fa-crown text-amber-400 text-base"></i>
+                    <span class="text-xs sm:text-sm font-bold text-amber-200">ハイスコア:</span>
+                    <span id="highScoreDisplay" class="text-base sm:text-lg font-black text-amber-300 font-mono">0 pt</span>
+                    <span id="newRecordBadge" class="hidden ml-2 px-2 py-0.5 rounded bg-red-500 text-white text-[10px] font-black animate-pulse">NEW RECORD!</span>
+                </div>
+
+                <!-- Ghost Breakdown -->
+                <div class="bg-slate-950/70 rounded-2xl p-5 border border-slate-800 mb-8 flex justify-around text-center shadow-inner">
+                    <div>
+                        <div class="text-xs sm:text-sm text-slate-400 mb-1">小おばけ (10pt)</div>
+                        <div id="ghostCountSmall" class="text-2xl sm:text-3xl font-bold text-cyan-400">0匹</div>
+                    </div>
+                    <div class="w-px bg-slate-800"></div>
+                    <div>
+                        <div class="text-xs sm:text-sm text-slate-400 mb-1">中おばけ (30pt)</div>
+                        <div id="ghostCountMedium" class="text-2xl sm:text-3xl font-bold text-amber-400">0匹</div>
+                    </div>
+                    <div class="w-px bg-slate-800"></div>
+                    <div>
+                        <div class="text-xs sm:text-sm text-slate-400 mb-1">ボスおばけ (500pt)</div>
+                        <div id="ghostCountBoss" class="text-2xl sm:text-3xl font-bold text-purple-400">0匹</div>
+                    </div>
+                </div>
+
+                <div class="relative inline-block w-full sm:w-auto">
+                    <button id="btnRestartGame" class="relative z-10 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white font-black text-lg sm:text-xl px-10 py-5 rounded-2xl shadow-xl transition transform active:scale-95 flex items-center justify-center gap-3 w-full">
+                        <i class="fa-solid fa-house text-xl"></i>
+                        <span>タイトルへもどる (タップ / スペース)</span>
+                    </button>
+                    <div id="hoverProgressContainer_restart" class="absolute inset-0 rounded-2xl border-4 border-purple-400/0 pointer-events-none transition-all">
+                        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                            <circle id="hoverCircle_restart" cx="50" cy="50" r="46" fill="none" stroke="#c084fc" stroke-width="8" stroke-dasharray="289" stroke-dashoffset="289" stroke-linecap="round" class="transition-all duration-75"></circle>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="configSidebar" class="absolute top-0 right-0 h-full w-85 sm:w-96 bg-slate-900/95 border-l border-slate-800 backdrop-blur-2xl z-50 p-6 flex flex-col justify-between transition-transform duration-300 translate-x-full shadow-2xl overflow-y-auto">
+            <div class="space-y-6">
+                <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                    <h3 class="font-black text-slate-100 flex items-center gap-2.5 text-base sm:text-lg">
+                        <i class="fa-solid fa-sliders text-cyan-400 text-xl"></i>
+                        <span>操作・ゲーム設定</span>
+                    </h3>
+                    <div class="flex items-center gap-3">
+                        <button id="btnCloseSidebar" class="text-slate-300 hover:text-white w-10 h-10 flex items-center justify-center rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 transition shadow-lg">
+                            <i class="fa-solid fa-xmark text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Calibration Button at TOP of Settings -->
+                <div class="bg-cyan-950/40 p-3.5 rounded-2xl border border-cyan-500/30">
+                    <button id="btnCalibrate" class="w-full bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white py-4 rounded-xl text-sm font-black border border-cyan-400/40 transition flex items-center justify-center gap-2.5 active:scale-95 shadow-lg shadow-cyan-500/20">
+                        <i class="fa-solid fa-crosshairs text-lg"></i>
+                        <span>【現在の顔の位置を中心】に設定</span>
+                    </button>
+                    <p class="text-[11px] text-cyan-300/80 text-center mt-2 font-medium">顔認識でライトがずれている時に押すと位置を初期化します</p>
+                </div>
+
+                <!-- Control Mode Selector -->
+                <div>
+                    <label class="text-xs text-slate-400 font-bold tracking-wider uppercase mb-2.5 block">操作モード選択</label>
+                    <div class="grid grid-cols-2 gap-2.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+                        <button id="btnModeCamera" class="py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 active:scale-95">
+                            <i class="fa-solid fa-camera text-base"></i> カメラ (顔)
+                        </button>
+                        <button id="btnModeMouse" class="py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-2 active:scale-95">
+                            <i class="fa-solid fa-hand-pointer text-base"></i> タッチ / マウス
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Game Time Limit Setting -->
+                <div class="border-b border-slate-800/80 pb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="sliderGameTime" class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-clock text-cyan-400"></i>制限時間（ゲーム時間）</label>
+                        <span id="valGameTime" class="text-sm text-cyan-400 font-mono font-black">60秒</span>
+                    </div>
+                    <input type="range" id="sliderGameTime" min="15" max="120" step="5" value="60" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+                </div>
+
+                <!-- Boss Spawn Time Setting -->
+                <div class="border-b border-slate-800/80 pb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="sliderBossSpawnTime" class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-skull text-purple-400"></i>ボス出現（残り時間）</label>
+                        <span id="valBossSpawnTime" class="text-sm text-purple-400 font-mono font-black">30秒</span>
+                    </div>
+                    <input type="range" id="sliderBossSpawnTime" min="5" max="55" step="5" value="30" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                </div>
+
+                <!-- Ghost Softness Setting -->
+                <div class="border-b border-slate-800/80 pb-5">
+                    <div class="flex justify-between items-center mb-2">
+                        <label for="sliderGhostSoftness" class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5">
+                            <i class="fa-solid fa-wand-magic-sparkles text-pink-400"></i>おばけの柔らかさ
+                        </label>
+                        <span id="valGhostSoftness" class="text-sm text-pink-400 font-mono font-black">2.0x (やわらか)</span>
+                    </div>
+                    <input type="range" id="sliderGhostSoftness" min="0.5" max="10.0" step="0.5" value="2.0" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-pink-500">
+                    <p class="text-[11px] text-slate-400 mt-1">数値を上げるほど一瞬で退治できます（最大10.0x）</p>
+                </div>
+
+                <!-- Camera Config -->
+                <div id="cameraConfigSection" class="space-y-4">
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-xs text-slate-400 font-bold tracking-wider uppercase">カメラ認識プレビュー</label>
+                            <span id="cameraStatus" class="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span> 稼働中
+                            </span>
+                        </div>
+                        <div class="relative w-full h-40 bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center shadow-inner">
+                            <canvas id="faceFeedbackCanvas" class="w-full h-full object-cover"></canvas>
+                            <div id="cameraLoadingSpinner" class="absolute inset-0 bg-slate-950/85 flex flex-col items-center justify-center text-xs text-slate-400 gap-2 p-3">
+                                <i class="fa-solid fa-circle-notch fa-spin text-cyan-400 text-3xl"></i>
+                                <span>カメラ準備中...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="sliderLightRadius" class="text-xs text-slate-300 font-bold tracking-wider uppercase">ライトの大きさ（円サイズ）</label>
+                            <span id="valLightRadius" class="text-sm text-cyan-400 font-mono font-black">125px</span>
+                        </div>
+                        <input type="range" id="sliderLightRadius" min="60" max="220" step="5" value="125" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="sliderSensitivity" class="text-xs text-slate-300 font-bold tracking-wider uppercase">ライトの移動スピード</label>
+                            <span id="valSensitivity" class="text-sm text-cyan-400 font-mono font-black">2.5x</span>
+                        </div>
+                        <input type="range" id="sliderSensitivity" min="0.5" max="5.0" step="0.1" value="2.5" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+                    </div>
+                </div>
+
+                <!-- Microphone Visualizer & Threshold -->
+                <div class="border-t border-slate-800/80 pt-5 space-y-3">
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-microphone text-cyan-400"></i>マイク音量入力</label>
+                        <span id="micPermissionStatus" class="text-xs font-bold text-slate-400">マイク未接続</span>
+                    </div>
+                    <div class="w-full h-4 bg-slate-950 rounded-xl overflow-hidden border border-slate-800 relative shadow-inner">
+                        <div id="micVolumeBar" class="h-full bg-gradient-to-r from-teal-500 to-cyan-400 w-0 transition-all duration-75"></div>
+                        <div id="micThresholdLine" class="absolute top-0 bottom-0 w-1 bg-red-500" style="left: 15%;"></div>
+                    </div>
+
+                    <div class="flex justify-between items-center pt-2 mb-1">
+                        <label for="sliderMicThreshold" class="text-xs text-slate-300 font-bold tracking-wider uppercase">反応する音量 (しきい値)</label>
+                        <span id="valMicThreshold" class="text-sm text-blue-400 font-mono font-black">12</span>
+                    </div>
+                    <input type="range" id="sliderMicThreshold" min="2" max="60" step="1" value="12" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-blue-500">
+                </div>
+
+                <!-- Sound Controls Section -->
+                <div class="border-t border-slate-800/80 pt-5 space-y-4">
+                    <span class="text-xs text-slate-400 font-bold tracking-wider uppercase block">サウンド設定</span>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="sliderBgmVolume" class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-music text-purple-400"></i>BGM 音量</label>
+                            <span id="valBgmVolume" class="text-sm text-purple-400 font-mono font-black">40%</span>
+                        </div>
+                        <input type="range" id="sliderBgmVolume" min="0" max="100" step="5" value="40" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label for="sliderSeVolume" class="text-xs text-slate-300 font-bold tracking-wider uppercase flex items-center gap-1.5"><i class="fa-solid fa-volume-high text-amber-400"></i>SE (効果音) 音量</label>
+                            <span id="valSeVolume" class="text-sm text-amber-400 font-mono font-black">70%</span>
+                        </div>
+                        <input type="range" id="sliderSeVolume" min="0" max="100" step="5" value="70" class="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-amber-500">
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-6 border-t border-slate-800 text-xs text-slate-500 text-center">
+                <span>おばけサーチャー v2.8 - iPad Edition</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const webcam = document.getElementById('webcam');
+        const faceFeedbackCanvas = document.getElementById('faceFeedbackCanvas');
+        const faceFeedbackCtx = faceFeedbackCanvas.getContext('2d');
+        const configSidebar = document.getElementById('configSidebar');
+        const btnToggleSidebar = document.getElementById('btnToggleSidebar');
+        const btnCloseSidebar = document.getElementById('btnCloseSidebar');
+        const toggleIcon = document.getElementById('toggleIcon');
+        
+        // UI Screens
+        const titleScreen = document.getElementById('titleScreen');
+        const countdownScreen = document.getElementById('countdownScreen');
+        const countdownNumber = document.getElementById('countdownNumber');
+        const gameUi = document.getElementById('gameUi');
+        const resultScreen = document.getElementById('resultScreen');
+        
+        // Buttons
+        const btnStartGame = document.getElementById('btnStartGame');
+        const btnRestartGame = document.getElementById('btnRestartGame');
+        const btnCalibrate = document.getElementById('btnCalibrate');
+        const btnModeCamera = document.getElementById('btnModeCamera');
+        const btnModeMouse = document.getElementById('btnModeMouse');
+        
+        // Sliders & Controls
+        const sliderSensitivity = document.getElementById('sliderSensitivity');
+        const valSensitivity = document.getElementById('valSensitivity');
+        const sliderLightRadius = document.getElementById('sliderLightRadius');
+        const valLightRadius = document.getElementById('valLightRadius');
+        const sliderGameTime = document.getElementById('sliderGameTime');
+        const valGameTime = document.getElementById('valGameTime');
+        const sliderBossSpawnTime = document.getElementById('sliderBossSpawnTime');
+        const valBossSpawnTime = document.getElementById('valBossSpawnTime');
+        const sliderGhostSoftness = document.getElementById('sliderGhostSoftness');
+        const valGhostSoftness = document.getElementById('valGhostSoftness');
+        const sliderMicThreshold = document.getElementById('sliderMicThreshold');
+        const valMicThreshold = document.getElementById('valMicThreshold');
+        const micThresholdLine = document.getElementById('micThresholdLine');
+        const sliderBgmVolume = document.getElementById('sliderBgmVolume');
+        const valBgmVolume = document.getElementById('valBgmVolume');
+        const sliderSeVolume = document.getElementById('sliderSeVolume');
+        const valSeVolume = document.getElementById('valSeVolume');
+        
+        // Displays
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const timerDisplay = document.getElementById('timerDisplay');
+        const finalScore = document.getElementById('finalScore');
+        const highScoreDisplay = document.getElementById('highScoreDisplay');
+        const newRecordBadge = document.getElementById('newRecordBadge');
+        const ghostCountSmall = document.getElementById('ghostCountSmall');
+        const ghostCountMedium = document.getElementById('ghostCountMedium');
+        const ghostCountBoss = document.getElementById('ghostCountBoss');
+        const micPermissionStatus = document.getElementById('micPermissionStatus');
+        const micVolumeBar = document.getElementById('micVolumeBar');
+        const searchProgressBar = document.getElementById('searchProgressBar');
+        const searchStatusText = document.getElementById('searchStatusText');
+        const gaugePercentageText = document.getElementById('gaugePercentageText');
+
+        // Offscreen canvas for dark mask overlay
+        const maskCanvas = document.createElement('canvas');
+        const maskCtx = maskCanvas.getContext('2d');
+
+        // Hover UI elements
+        const hoverCircleStart = document.getElementById('hoverCircle_start');
+        const hoverCircleRestart = document.getElementById('hoverCircle_restart');
+
+        // Game State Variables
+        let gameState = 'TITLE'; // TITLE, COUNTDOWN, PLAYING, END
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('obake_searcher_highscore') || '0', 10);
+        let gameDuration = 60;
+        let bossSpawnTime = 30;
+        let ghostSoftness = 2.0;
+        let timeLeft = 60;
+        let countdownTime = 3;
+        let countdownInterval = null;
+        let gameTimerInterval = null;
+        
+        // Game Entities
+        let ghosts = [];
+        let bossGhost = null;
+        let bossSpawned = false;
+        let particles = [];
+        let searchWaves = [];
+        
+        let stats = { small: 0, medium: 0, boss: 0 };
+        let player = {
+            x: 0,
+            y: 0,
+            smoothX: 0,
+            smoothY: 0,
+            radius: 125,
+            searchGauge: 0,
+            maxSearchGauge: 100
+        };
+
+        // Calibration & Face Tracking
+        let faceCoords = { x: 0.5, y: 0.5 };
+        let prevFaceCoords = { x: 0.5, y: 0.5 };
+        let calibrationCenter = { x: 0.5, y: 0.5 };
+        let sensitivity = 2.5;
+        let isCameraControl = true;
+        let sidebarOpen = false;
+
+        let audioCtx = null;
+        let micAnalyser = null;
+        let micDataArray = null;
+        let micThreshold = 12;
+        let currentMicVolume = 0;
+
+        let bgmVolume = 0.4;
+        let seVolume = 0.7;
+        let currentBgmMode = null;
+
+        // MP3 BGM Sources
+        const bgmUrls = {
+            TITLE: 'https://hakubeisan.github.io/BGM_ghost/maou_bgm_cyber41.mp3',
+            PLAYING: 'https://hakubeisan.github.io/BGM_ghost/maou_bgm_cyber37.mp3',
+            BOSS: 'https://hakubeisan.github.io/BGM_ghost/maou_bgm_cyber11.mp3',
+            END: 'https://hakubeisan.github.io/BGM_ghost/maou_bgm_cyber36.mp3'
+        };
+
+        const bgmAudio = new Audio();
+        bgmAudio.loop = true;
+        bgmAudio.volume = bgmVolume;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx || seVolume <= 0) return;
+            try {
+                initAudio();
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                if (type === 'hit') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(700, now);
+                    osc.frequency.exponentialRampToValueAtTime(120, now + 0.35);
+                    gain.gain.setValueAtTime(0.4 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+                    osc.start(now);
+                    osc.stop(now + 0.35);
+                } else if (type === 'search_pulse') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(220, now);
+                    osc.frequency.exponentialRampToValueAtTime(880, now + 0.5);
+                    gain.gain.setValueAtTime(0.35 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                    osc.start(now);
+                    osc.stop(now + 0.5);
+                } else if (type === 'ghost_found') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1046.5, now);
+                    osc.frequency.setValueAtTime(1567.98, now + 0.08);
+                    gain.gain.setValueAtTime(0.3 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'ghost_under_light') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.05);
+                    gain.gain.setValueAtTime(0.08 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.001, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'countdown') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now);
+                    gain.gain.setValueAtTime(0.2 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                } else if (type === 'start') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, now);
+                    osc.frequency.setValueAtTime(1174.66, now + 0.15);
+                    gain.gain.setValueAtTime(0.3 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'end') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(320, now);
+                    osc.frequency.linearRampToValueAtTime(80, now + 0.8);
+                    gain.gain.setValueAtTime(0.3 * seVolume, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.8);
+                    osc.start(now);
+                    osc.stop(now + 0.8);
+                }
+            } catch (e) {
+                console.warn('Sound error:', e);
+            }
+        }
+
+        function startBGM(mode) {
+            initAudio();
+            if (currentBgmMode === mode) return;
+            currentBgmMode = mode;
+
+            if (bgmUrls[mode]) {
+                bgmAudio.pause();
+                bgmAudio.src = bgmUrls[mode];
+                bgmAudio.volume = bgmVolume;
+                bgmAudio.playbackRate = 1.0;
+                bgmAudio.currentTime = 0;
+                bgmAudio.play().catch(e => console.warn("BGM play interrupted:", e));
+            }
+        }
+
+        async function setupMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                initAudio();
+                const source = audioCtx.createMediaStreamSource(stream);
+                micAnalyser = audioCtx.createAnalyser();
+                micAnalyser.fftSize = 256;
+                source.connect(micAnalyser);
+                micDataArray = new Uint8Array(micAnalyser.frequencyBinCount);
+                micPermissionStatus.innerText = "マイク接続完了";
+                micPermissionStatus.className = "text-xs font-bold text-emerald-400";
+            } catch (e) {
+                console.warn("Mic access denied or unavailable", e);
+                micPermissionStatus.innerText = "マイク未接続 (自動波紋)";
+                micPermissionStatus.className = "text-xs font-bold text-amber-400";
+            }
+        }
+
+        class SmokeParticle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.radius = 8 + Math.random() * 12;
+                this.vx = (Math.random() - 0.5) * 6;
+                this.vy = (Math.random() - 0.5) * 6;
+                this.alpha = 1.0;
+                this.decay = 0.02 + Math.random() * 0.02;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.alpha -= this.decay;
+            }
+
+            draw(targetCtx) {
+                if (this.alpha <= 0) return;
+                targetCtx.save();
+                targetCtx.globalAlpha = this.alpha;
+                targetCtx.fillStyle = this.color;
+                targetCtx.beginPath();
+                targetCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                targetCtx.fill();
+                targetCtx.restore();
+            }
+        }
+
+        class SearchWave {
+            constructor(x, y, volume) {
+                this.x = x;
+                this.y = y;
+                this.radius = 10;
+                const volFactor = Math.min(Math.max((volume - micThreshold) / 30, 0.5), 2.5);
+                this.maxRadius = Math.min(canvas.width, canvas.height) * 0.8 * volFactor;
+                this.speed = 8 * volFactor;
+                this.alpha = 1.0;
+            }
+
+            update() {
+                this.radius += this.speed;
+                this.alpha = 1.0 - (this.radius / this.maxRadius);
+            }
+
+            draw(targetCtx) {
+                if (this.alpha <= 0) return;
+                targetCtx.save();
+                targetCtx.globalAlpha = Math.max(this.alpha, 0);
+                targetCtx.strokeStyle = '#06b6d4';
+                targetCtx.lineWidth = 6;
+                targetCtx.shadowColor = '#06b6d4';
+                targetCtx.shadowBlur = 20;
+                targetCtx.beginPath();
+                targetCtx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                targetCtx.stroke();
+                targetCtx.restore();
+            }
+        }
+
+        class Ghost {
+            constructor() {
+                this.type = Math.random() < 0.6 ? 'small' : 'medium';
+                this.radius = this.type === 'small' ? 26 : 40;
+                this.points = this.type === 'small' ? 10 : 30;
+
+                const colors = [
+                    { fill: 'rgba(239, 68, 68, 0.85)', outline: '#ef4444', name: 'red' },
+                    { fill: 'rgba(34, 197, 94, 0.85)', outline: '#22c55e', name: 'green' },
+                    { fill: 'rgba(234, 179, 8, 0.85)', outline: '#eab308', name: 'yellow' }
+                ];
+                const choice = colors[Math.floor(Math.random() * colors.length)];
+                this.fillColor = choice.fill;
+                this.outlineColor = choice.outline;
+
+                this.resetPosition();
+                this.vx = (Math.random() - 0.5) * 2.5;
+                this.vy = (Math.random() - 0.5) * 2.5;
+                this.floatPhase = Math.random() * Math.PI * 2;
+                
+                this.chargeTimer = 0;
+                this.searchGlowTimer = 0;
+                this.isDispelling = false;
+                this.dispelProgress = 0;
+                this.rotation = 0;
+            }
+
+            resetPosition() {
+                this.x = Math.random() * (canvas.width - 160) + 80;
+                this.y = Math.random() * (canvas.height - 160) + 80;
+            }
+
+            update() {
+                if (this.isDispelling) {
+                    this.dispelProgress += 0.05;
+                    this.rotation += 0.25;
+                    this.y -= 4;
+                    
+                    if (Math.random() < 0.7) {
+                        particles.push(new SmokeParticle(this.x, this.y, this.outlineColor));
+                    }
+
+                    if (this.dispelProgress >= 1.0) {
+                        this.respawn();
+                    }
+                    return;
+                }
+
+                // Bound by Search Wave (Glow Timer) - STOP MOVING COMPLETELY
+                if (this.searchGlowTimer > 0) {
+                    this.searchGlowTimer--;
+
+                    const distToPlayer = Math.hypot(this.x - player.smoothX, this.y - player.smoothY);
+                    if (distToPlayer < player.radius - 10) {
+                        // EASY KILL: Instant dispel when revealed by search!
+                        this.chargeTimer = 60;
+                        this.triggerDispel();
+                    }
+                    return;
+                }
+
+                this.floatPhase += 0.04;
+                this.x += this.vx + Math.sin(this.floatPhase) * 1.2;
+                this.y += this.vy + Math.cos(this.floatPhase * 0.8) * 1.2;
+
+                if (this.x < 40 || this.x > canvas.width - 40) this.vx *= -1;
+                if (this.y < 40 || this.y > canvas.height - 40) this.vy *= -1;
+
+                const distToPlayer = Math.hypot(this.x - player.smoothX, this.y - player.smoothY);
+                if (distToPlayer < player.radius - 10) {
+                    this.chargeTimer += ghostSoftness * 1.5;
+                    if (Math.floor(this.chargeTimer) % 15 === 0) {
+                        playSound('ghost_under_light');
+                    }
+                    if (this.chargeTimer >= 60) {
+                        this.triggerDispel();
+                    }
+                } else {
+                    this.chargeTimer = Math.max(0, this.chargeTimer - 2);
+                }
+            }
+
+            triggerDispel() {
+                this.isDispelling = true;
+                score += this.points;
+                if (this.type === 'small') stats.small++;
+                else stats.medium++;
+                
+                scoreDisplay.innerText = score.toString().padStart(3, '0');
+                player.searchGauge = Math.min(player.maxSearchGauge, player.searchGauge + 15);
+                playSound('hit');
+            }
+
+            respawn() {
+                this.isDispelling = false;
+                this.dispelProgress = 0;
+                this.rotation = 0;
+                this.chargeTimer = 0;
+                this.resetPosition();
+            }
+
+            draw(targetCtx, isInsideLight) {
+                if (!isInsideLight && !this.isDispelling && this.searchGlowTimer <= 0) {
+                    return;
+                }
+
+                targetCtx.save();
+                targetCtx.translate(this.x, this.y);
+                targetCtx.rotate(this.rotation);
+
+                if (this.isDispelling) {
+                    targetCtx.globalAlpha = Math.max(0, 1 - this.dispelProgress);
+                }
+
+                const r = this.radius;
+
+                if (!isInsideLight && this.searchGlowTimer > 0) {
+                    targetCtx.strokeStyle = this.outlineColor;
+                    targetCtx.lineWidth = 5;
+                    targetCtx.shadowColor = this.outlineColor;
+                    targetCtx.shadowBlur = 18;
+
+                    targetCtx.beginPath();
+                    targetCtx.arc(0, -r * 0.2, r * 0.8, Math.PI, 0, false);
+                    targetCtx.lineTo(r * 0.8, r * 0.8);
+                    targetCtx.lineTo(-r * 0.8, r * 0.8);
+                    targetCtx.closePath();
+                    targetCtx.stroke();
+
+                    // Plasma binding ring
+                    const pulse = Math.sin(Date.now() * 0.015) * 3;
+                    targetCtx.strokeStyle = '#38bdf8';
+                    targetCtx.lineWidth = 3;
+                    targetCtx.beginPath();
+                    targetCtx.arc(0, 0, r * 1.25 + pulse, 0, Math.PI * 2);
+                    targetCtx.stroke();
+
+                    // Binding energy cross
+                    targetCtx.beginPath();
+                    targetCtx.moveTo(-r * 1.1, -r * 1.1);
+                    targetCtx.lineTo(r * 1.1, r * 1.1);
+                    targetCtx.moveTo(r * 1.1, -r * 1.1);
+                    targetCtx.lineTo(-r * 1.1, r * 1.1);
+                    targetCtx.stroke();
+
+                    targetCtx.restore();
+                    return;
+                }
+
+                targetCtx.fillStyle = this.fillColor;
+                targetCtx.strokeStyle = this.outlineColor;
+                targetCtx.lineWidth = 3;
+                targetCtx.shadowColor = this.outlineColor;
+                targetCtx.shadowBlur = 12;
+
+                targetCtx.beginPath();
+                targetCtx.arc(0, -r * 0.2, r * 0.8, Math.PI, 0, false);
+                targetCtx.lineTo(r * 0.8, r * 0.7);
+                targetCtx.quadraticCurveTo(r * 0.4, r * 0.9, 0, r * 0.7);
+                targetCtx.quadraticCurveTo(-r * 0.4, r * 0.9, -r * 0.8, r * 0.7);
+                targetCtx.closePath();
+                targetCtx.fill();
+                targetCtx.stroke();
+
+                targetCtx.fillStyle = '#0f172a';
+                targetCtx.beginPath();
+                targetCtx.arc(-r * 0.3, -r * 0.2, r * 0.2, 0, Math.PI * 2);
+                targetCtx.arc(r * 0.3, -r * 0.2, r * 0.2, 0, Math.PI * 2);
+                targetCtx.fill();
+
+                targetCtx.fillStyle = '#ffffff';
+                targetCtx.beginPath();
+                targetCtx.arc(-r * 0.25, -r * 0.25, r * 0.08, 0, Math.PI * 2);
+                targetCtx.arc(r * 0.35, -r * 0.25, r * 0.08, 0, Math.PI * 2);
+                targetCtx.fill();
+
+                if (this.chargeTimer > 0 && !this.isDispelling) {
+                    targetCtx.strokeStyle = '#38bdf8';
+                    targetCtx.lineWidth = 4;
+                    targetCtx.beginPath();
+                    targetCtx.arc(0, 0, r * 1.3, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * (this.chargeTimer / 60)));
+                    targetCtx.stroke();
+                }
+
+                targetCtx.restore();
+            }
+        }
+
+        class BossGhost {
+            constructor() {
+                this.type = 'boss';
+                this.radius = 90;
+                this.points = 500;
+                this.fillColor = 'rgba(168, 85, 247, 0.85)';
+                this.outlineColor = '#a855f7';
+                
+                this.resetPosition();
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = (Math.random() - 0.5) * 3;
+                this.floatPhase = Math.random() * Math.PI * 2;
+                
+                this.maxSegments = 3;
+                this.currentSegment = 0;
+                this.chargeProgress = 0;
+                this.speedMultipliers = [1.3, 1.0, 0.7];
+                
+                this.isEvading = false;
+                this.evadeTimer = 0;
+                this.searchGlowTimer = 0;
+                this.isDispelling = false;
+                this.dispelProgress = 0;
+                this.rotation = 0;
+            }
+
+            resetPosition() {
+                const margin = 140;
+                this.x = Math.random() * Math.max(100, canvas.width - margin * 2) + margin;
+                this.y = Math.random() * Math.max(100, canvas.height - margin * 2) + margin;
+            }
+
+            update() {
+                if (this.isDispelling) {
+                    this.dispelProgress += 0.04;
+                    this.rotation += 0.2;
+                    this.y -= 5;
+                    if (Math.random() < 0.8) {
+                        particles.push(new SmokeParticle(this.x, this.y, '#c084fc'));
+                    }
+                    return;
+                }
+
+                // Bound by Search Wave - STOP MOVING & 2x Gauge Speed!
+                if (this.searchGlowTimer > 0) {
+                    this.searchGlowTimer--;
+
+                    const distToPlayer = Math.hypot(this.x - player.smoothX, this.y - player.smoothY);
+                    if (distToPlayer < player.radius - 10 && !this.isEvading) {
+                        // 2x SPEED GAUGE BOOST with softness
+                        const fillRate = this.speedMultipliers[this.currentSegment] * 2.0 * ghostSoftness;
+                        this.chargeProgress += fillRate;
+
+                        if (Math.floor(this.chargeProgress) % 15 === 0) {
+                            playSound('ghost_under_light');
+                        }
+
+                        if (this.chargeProgress >= 60) {
+                            this.chargeProgress = 0;
+                            if (this.currentSegment < this.maxSegments - 1) {
+                                this.currentSegment++;
+                                this.isEvading = true;
+                                this.evadeTimer = 60;
+                                playSound('hit');
+                                for (let i = 0; i < 10; i++) {
+                                    particles.push(new SmokeParticle(this.x, this.y, '#c084fc'));
+                                }
+                            } else {
+                                this.triggerDispel();
+                            }
+                        }
+                    }
+                    return;
+                }
+
+                if (this.isEvading) {
+                    this.evadeTimer--;
+                    const angle = Math.atan2(this.y - player.smoothY, this.x - player.smoothX);
+                    this.x += Math.cos(angle) * 6.5;
+                    this.y += Math.sin(angle) * 6.5;
+
+                    if (this.evadeTimer <= 0) {
+                        this.isEvading = false;
+                    }
+                } else {
+                    this.floatPhase += 0.05;
+                    this.x += this.vx + Math.sin(this.floatPhase) * 1.5;
+                    this.y += this.vy + Math.cos(this.floatPhase * 0.8) * 1.5;
+                }
+
+                const margin = this.radius;
+                if (this.x < -margin) this.x = canvas.width + margin;
+                else if (this.x > canvas.width + margin) this.x = -margin;
+
+                if (this.y < -margin) this.y = canvas.height + margin;
+                else if (this.y > canvas.height + margin) this.y = -margin;
+
+                const distToPlayer = Math.hypot(this.x - player.smoothX, this.y - player.smoothY);
+                if (distToPlayer < player.radius - 10 && !this.isEvading) {
+                    const fillRate = this.speedMultipliers[this.currentSegment] * ghostSoftness * 1.5;
+                    this.chargeProgress += fillRate;
+
+                    if (Math.floor(this.chargeProgress) % 15 === 0) {
+                        playSound('ghost_under_light');
+                    }
+
+                    if (this.chargeProgress >= 60) {
+                        this.chargeProgress = 0;
+                        if (this.currentSegment < this.maxSegments - 1) {
+                            this.currentSegment++;
+                            this.isEvading = true;
+                            this.evadeTimer = 60;
+                            playSound('hit');
+                            for (let i = 0; i < 10; i++) {
+                                particles.push(new SmokeParticle(this.x, this.y, '#c084fc'));
+                            }
+                        } else {
+                            this.triggerDispel();
+                        }
+                    }
+                } else if (!this.isEvading) {
+                    this.chargeProgress = Math.max(0, this.chargeProgress - 0.4);
+                }
+            }
+
+            triggerDispel() {
+                this.isDispelling = true;
+                score += this.points;
+                stats.boss++;
+                scoreDisplay.innerText = score.toString().padStart(3, '0');
+                player.searchGauge = Math.min(player.maxSearchGauge, player.searchGauge + 20);
+                playSound('start');
+                startBGM('PLAYING');
+            }
+
+            draw(targetCtx, isInsideLight) {
+                if (!isInsideLight && !this.isDispelling && this.searchGlowTimer <= 0) {
+                    return;
+                }
+
+                targetCtx.save();
+                targetCtx.translate(this.x, this.y);
+                targetCtx.rotate(this.rotation);
+
+                if (this.isDispelling) {
+                    targetCtx.globalAlpha = Math.max(0, 1 - this.dispelProgress);
+                } else if (this.isEvading) {
+                    targetCtx.globalAlpha = 0.35;
+                }
+
+                const r = this.radius;
+
+                if (!isInsideLight && this.searchGlowTimer > 0) {
+                    targetCtx.strokeStyle = this.outlineColor;
+                    targetCtx.lineWidth = 6;
+                    targetCtx.shadowColor = this.outlineColor;
+                    targetCtx.shadowBlur = 20;
+
+                    targetCtx.beginPath();
+                    targetCtx.arc(0, -r * 0.2, r * 0.8, Math.PI, 0, false);
+                    targetCtx.lineTo(r * 0.8, r * 0.8);
+                    targetCtx.lineTo(-r * 0.8, r * 0.8);
+                    targetCtx.closePath();
+                    targetCtx.stroke();
+                    targetCtx.restore();
+                    return;
+                }
+
+                targetCtx.fillStyle = this.fillColor;
+                targetCtx.strokeStyle = this.outlineColor;
+                targetCtx.lineWidth = 4;
+                targetCtx.shadowColor = '#c084fc';
+                targetCtx.shadowBlur = 18;
+
+                targetCtx.beginPath();
+                targetCtx.arc(0, -r * 0.2, r * 0.8, Math.PI, 0, false);
+                targetCtx.lineTo(r * 0.8, r * 0.7);
+                targetCtx.quadraticCurveTo(r * 0.4, r * 0.9, 0, r * 0.7);
+                targetCtx.quadraticCurveTo(-r * 0.4, r * 0.9, -r * 0.8, r * 0.7);
+                targetCtx.closePath();
+                targetCtx.fill();
+                targetCtx.stroke();
+
+                // Crown
+                targetCtx.fillStyle = '#f59e0b';
+                targetCtx.beginPath();
+                targetCtx.moveTo(-r * 0.4, -r * 0.85);
+                targetCtx.lineTo(-r * 0.2, -r * 1.3);
+                targetCtx.lineTo(0, -r * 0.95);
+                targetCtx.lineTo(r * 0.2, -r * 1.3);
+                targetCtx.lineTo(r * 0.4, -r * 0.85);
+                targetCtx.closePath();
+                targetCtx.fill();
+
+                // Eyes
+                targetCtx.fillStyle = '#0f172a';
+                targetCtx.beginPath();
+                targetCtx.arc(-r * 0.3, -r * 0.2, r * 0.22, 0, Math.PI * 2);
+                targetCtx.arc(r * 0.3, -r * 0.2, r * 0.22, 0, Math.PI * 2);
+                targetCtx.fill();
+
+                // 3 Segment Ring Gauge
+                if (!this.isDispelling) {
+                    const totalArc = Math.PI * 2;
+                    const segmentGap = 0.2;
+                    const segmentArc = (totalArc - (3 * segmentGap)) / 3;
+
+                    for (let i = 0; i < this.maxSegments; i++) {
+                        const segStart = -Math.PI / 2 + i * (segmentArc + segmentGap);
+                        const segEnd = segStart + segmentArc;
+
+                        targetCtx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                        targetCtx.lineWidth = 7;
+                        targetCtx.beginPath();
+                        targetCtx.arc(0, 0, r * 1.35, segStart, segEnd);
+                        targetCtx.stroke();
+
+                        if (i < this.currentSegment) {
+                            targetCtx.strokeStyle = '#c084fc';
+                            targetCtx.lineWidth = 7;
+                            targetCtx.beginPath();
+                            targetCtx.arc(0, 0, r * 1.35, segStart, segEnd);
+                            targetCtx.stroke();
+                        } else if (i === this.currentSegment && this.chargeProgress > 0) {
+                            const fillFrac = this.chargeProgress / 60;
+                            const fillEnd = segStart + segmentArc * fillFrac;
+                            targetCtx.strokeStyle = '#38bdf8';
+                            targetCtx.lineWidth = 7;
+                            targetCtx.beginPath();
+                            targetCtx.arc(0, 0, r * 1.35, segStart, fillEnd);
+                            targetCtx.stroke();
+                        }
+                    }
+                }
+
+                targetCtx.restore();
+            }
+        }
+
+        function setupFaceMesh() {
+            try {
+                const faceMesh = new FaceMesh({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+                });
+
+                faceMesh.setOptions({
+                    maxNumFaces: 1,
+                    refineLandmarks: false,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
+
+                faceMesh.onResults(onFaceResults);
+
+                const camera = new Camera(webcam, {
+                    onFrame: async () => {
+                        if (webcam && webcam.readyState >= 2) {
+                            try {
+                                await faceMesh.send({ image: webcam });
+                            } catch (e) {
+                                console.warn("FaceMesh frame processing error:", e);
+                            }
+                        }
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                camera.start().then(() => {
+                    const spinner = document.getElementById('cameraLoadingSpinner');
+                    if (spinner) spinner.classList.add('hidden');
+                }).catch(err => {
+                    console.warn("Camera failed to start:", err);
+                    handleCameraError(err);
+                });
+            } catch (err) {
+                console.warn("FaceMesh setup exception:", err);
+                handleCameraError(err);
+            }
+        }
+
+        function handleCameraError(err) {
+            switchToMouseMode();
+
+            const spinner = document.getElementById('cameraLoadingSpinner');
+            const cameraStatus = document.getElementById('cameraStatus');
+            if (cameraStatus) {
+                cameraStatus.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> 未使用 (タッチ操作)`;
+                cameraStatus.className = "text-xs font-bold text-amber-400 flex items-center gap-1.5";
+            }
+            if (spinner) {
+                spinner.classList.remove('hidden');
+                spinner.innerHTML = `
+                    <i class="fa-solid fa-hand-pointer text-cyan-400 text-3xl mb-1"></i>
+                    <span class="text-amber-300 font-bold text-center px-2 text-xs sm:text-sm">カメラに接続できませんでした</span>
+                    <span class="text-[11px] text-slate-400 text-center px-2 mb-1">タッチ/マウスモードを自動適用しました</span>
+                `;
+            }
+        }
+
+        function switchToMouseMode() {
+            isCameraControl = false;
+            if (btnModeMouse && btnModeCamera) {
+                btnModeMouse.className = "py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40";
+                btnModeCamera.className = "py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-2";
+            }
+            const spinner = document.getElementById('cameraLoadingSpinner');
+            if (spinner && !isCameraControl) {
+                spinner.classList.remove('hidden');
+                spinner.innerHTML = `
+                    <i class="fa-solid fa-hand-pointer text-cyan-400 text-3xl mb-1"></i>
+                    <span class="text-cyan-300 font-bold text-center px-2 text-xs sm:text-sm">タッチ/マウス操作モード適用中</span>
+                `;
+            }
+        }
+
+        function onFaceResults(results) {
+            faceFeedbackCtx.clearRect(0, 0, faceFeedbackCanvas.width, faceFeedbackCanvas.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                const nose = landmarks[1];
+                faceCoords.x = 1.0 - nose.x;
+                faceCoords.y = nose.y;
+
+                faceFeedbackCtx.fillStyle = '#06b6d4';
+                faceFeedbackCtx.beginPath();
+                faceFeedbackCtx.arc(faceCoords.x * faceFeedbackCanvas.width, faceCoords.y * faceFeedbackCanvas.height, 7, 0, Math.PI * 2);
+                faceFeedbackCtx.fill();
+
+                if (isCameraControl) {
+                    const dirX = (faceCoords.x - calibrationCenter.x);
+                    const dirY = (faceCoords.y - calibrationCenter.y);
+                    
+                    const deadzone = 0.012;
+                    const speedX = Math.abs(dirX) > deadzone ? dirX * sensitivity * 16 : 0;
+                    const speedY = Math.abs(dirY) > deadzone ? dirY * sensitivity * 28 : 0;
+
+                    const moveX = (faceCoords.x - prevFaceCoords.x) * canvas.width * 1.6;
+                    const moveY = (faceCoords.y - prevFaceCoords.y) * canvas.height * 2.8;
+
+                    player.x += speedX + moveX;
+                    player.y += speedY + moveY;
+
+                    prevFaceCoords.x = faceCoords.x;
+                    prevFaceCoords.y = faceCoords.y;
+                }
+            }
+        }
+
+        function handlePointerMove(clientX, clientY) {
+            if (!isCameraControl) {
+                player.x = clientX;
+                player.y = clientY;
+            }
+        }
+
+        window.addEventListener('mousemove', (e) => handlePointerMove(e.clientX, e.clientY));
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches && e.touches.length > 0) {
+                handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: true });
+
+        function toggleSidebar() {
+            sidebarOpen = !sidebarOpen;
+            if (sidebarOpen) {
+                configSidebar.classList.remove('translate-x-full');
+                toggleIcon.classList.add('rotate-180');
+            } else {
+                configSidebar.classList.add('translate-x-full');
+                toggleIcon.classList.remove('rotate-180');
+            }
+        }
+
+        btnToggleSidebar.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleSidebar();
+        });
+        if (btnCloseSidebar) {
+            btnCloseSidebar.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleSidebar();
+            });
+        }
+
+        configSidebar.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Click / Tap handlers for screens
+        titleScreen.addEventListener('click', () => {
+            if (gameState === 'TITLE') triggerCountdown();
+        });
+
+        resultScreen.addEventListener('click', () => {
+            if (gameState === 'END') goToTitle();
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                if (gameState === 'TITLE') {
+                    triggerCountdown();
+                } else if (gameState === 'END') {
+                    goToTitle();
+                }
+            } else if (e.code === 'Backspace') {
+                e.preventDefault();
+                toggleSidebar();
+            }
+        });
+
+        function goToTitle() {
+            gameState = 'TITLE';
+            bgmAudio.playbackRate = 1.0;
+            resultScreen.classList.add('hidden');
+            gameUi.classList.add('hidden');
+            countdownScreen.classList.add('hidden');
+            titleScreen.classList.remove('hidden');
+            startBGM('TITLE');
+        }
+
+        function triggerCountdown() {
+            initAudio();
+            gameState = 'COUNTDOWN';
+            countdownTime = 3;
+            bgmAudio.playbackRate = 1.0;
+            titleScreen.classList.add('hidden');
+            resultScreen.classList.add('hidden');
+            countdownScreen.classList.remove('hidden');
+            countdownNumber.innerText = countdownTime;
+            playSound('countdown');
+            startBGM('TITLE');
+
+            ghosts = [];
+            bossGhost = null;
+            bossSpawned = false;
+            particles = [];
+            searchWaves = [];
+            score = 0;
+            stats.small = 0;
+            stats.medium = 0;
+            stats.boss = 0;
+            player.searchGauge = 0;
+            scoreDisplay.innerText = "000";
+
+            if (countdownInterval) clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                countdownTime--;
+                if (countdownTime > 0) {
+                    countdownNumber.innerText = countdownTime;
+                    playSound('countdown');
+                } else {
+                    clearInterval(countdownInterval);
+                    countdownScreen.classList.add('hidden');
+                    startGamePlay();
+                }
+            }, 1000);
+        }
+
+        function startGamePlay() {
+            gameState = 'PLAYING';
+            timeLeft = gameDuration;
+            timerDisplay.innerText = `${timeLeft}s`;
+            gameUi.classList.remove('hidden');
+            bgmAudio.playbackRate = 1.0;
+            playSound('start');
+            startBGM('PLAYING');
+
+            for (let i = 0; i < 5; i++) {
+                ghosts.push(new Ghost());
+            }
+
+            if (gameTimerInterval) clearInterval(gameTimerInterval);
+            gameTimerInterval = setInterval(() => {
+                timeLeft--;
+                timerDisplay.innerText = `${timeLeft}s`;
+
+                // Speed up BGM at 20 seconds remaining
+                if (timeLeft <= 20 && timeLeft > 0) {
+                    if (bgmAudio.playbackRate !== 1.5) {
+                        bgmAudio.playbackRate = 1.5;
+                    }
+                }
+
+                if (timeLeft <= 5 && timeLeft > 0) {
+                    playSound('countdown');
+                }
+
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            gameState = 'END';
+            clearInterval(gameTimerInterval);
+            gameUi.classList.add('hidden');
+            resultScreen.classList.remove('hidden');
+            
+            finalScore.innerText = score;
+
+            // Check and update High Score
+            let isNewRecord = false;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('obake_searcher_highscore', highScore.toString());
+                isNewRecord = true;
+            }
+            highScoreDisplay.innerText = `${highScore} pt`;
+            if (isNewRecord) {
+                newRecordBadge.classList.remove('hidden');
+            } else {
+                newRecordBadge.classList.add('hidden');
+            }
+
+            ghostCountSmall.innerText = `${stats.small}匹`;
+            ghostCountMedium.innerText = `${stats.medium}匹`;
+            if (ghostCountBoss) ghostCountBoss.innerText = `${stats.boss}匹`;
+            
+            playSound('end');
+            startBGM('END');
+        }
+
+        function gameLoop() {
+            player.x = Math.max(50, Math.min(canvas.width - 50, player.x));
+            player.y = Math.max(50, Math.min(canvas.height - 50, player.y));
+
+            player.smoothX += (player.x - player.smoothX) * 0.18;
+            player.smoothY += (player.y - player.smoothY) * 0.18;
+
+            const w = Math.max(1, canvas.width || window.innerWidth || 800);
+            const h = Math.max(1, canvas.height || window.innerHeight || 600);
+            if (canvas.width !== w) canvas.width = w;
+            if (canvas.height !== h) canvas.height = h;
+
+            // 1. Draw WebCam Feed on main canvas
+            ctx.save();
+            ctx.translate(w, 0);
+            ctx.scale(-1, 1);
+            if (webcam.readyState === 4 && webcam.videoWidth > 0 && webcam.videoHeight > 0) {
+                ctx.drawImage(webcam, 0, 0, w, h);
+            } else {
+                ctx.fillStyle = '#020617';
+                ctx.fillRect(0, 0, w, h);
+            }
+            ctx.restore();
+
+            // 2. Prepare Offscreen Dark Mask
+            maskCanvas.width = w;
+            maskCanvas.height = h;
+            maskCtx.clearRect(0, 0, w, h);
+            maskCtx.fillStyle = 'rgba(5, 8, 22, 0.94)';
+            maskCtx.fillRect(0, 0, w, h);
+
+            maskCtx.save();
+            maskCtx.globalCompositeOperation = 'destination-out';
+            const grad = maskCtx.createRadialGradient(
+                player.smoothX, player.smoothY, player.radius * 0.7,
+                player.smoothX, player.smoothY, player.radius
+            );
+            grad.addColorStop(0, 'rgba(0, 0, 0, 1.0)');
+            grad.addColorStop(1, 'rgba(0, 0, 0, 0.0)');
+            maskCtx.fillStyle = grad;
+            maskCtx.beginPath();
+            maskCtx.arc(player.smoothX, player.smoothY, player.radius, 0, Math.PI * 2);
+            maskCtx.fill();
+            maskCtx.restore();
+
+            if (maskCanvas.width > 0 && maskCanvas.height > 0) {
+                ctx.drawImage(maskCanvas, 0, 0);
+            }
+
+            // 3. Audio & Mic Processing
+            if (micAnalyser && micDataArray) {
+                micAnalyser.getByteFrequencyData(micDataArray);
+                let sum = 0;
+                for (let i = 0; i < micDataArray.length; i++) sum += micDataArray[i];
+                currentMicVolume = sum / micDataArray.length;
+
+                const volPercentage = Math.min(100, (currentMicVolume / 80) * 100);
+                micVolumeBar.style.width = `${volPercentage}%`;
+
+                if (player.searchGauge >= player.maxSearchGauge && currentMicVolume >= micThreshold) {
+                    triggerSearchWave(currentMicVolume);
+                }
+            } else if (player.searchGauge >= player.maxSearchGauge) {
+                searchStatusText.innerText = "自動サーチ発動準備完了！";
+                searchStatusText.className = "text-center text-xs sm:text-sm font-bold text-cyan-300 animate-pulse";
+            }
+
+            if (gameState === 'PLAYING') {
+                player.searchGauge = Math.min(player.maxSearchGauge, player.searchGauge + 0.03);
+                const percent = Math.floor((player.searchGauge / player.maxSearchGauge) * 100);
+                searchProgressBar.style.width = `${percent}%`;
+                gaugePercentageText.innerText = `${percent}%`;
+
+                if (player.searchGauge >= player.maxSearchGauge) {
+                    searchStatusText.innerText = "【声を出してサーチ！】";
+                    searchStatusText.className = "text-center text-xs sm:text-sm font-bold text-cyan-400 animate-pulse glow-text-cyan";
+                } else {
+                    searchStatusText.innerText = "ゲージ蓄積中...";
+                    searchStatusText.className = "text-center text-xs sm:text-sm font-bold text-slate-400";
+                }
+
+                if (timeLeft <= bossSpawnTime && !bossSpawned) {
+                    bossSpawned = true;
+                    bossGhost = new BossGhost();
+                    playSound('search_pulse');
+                    startBGM('BOSS');
+                }
+            }
+
+            // 4. Search Waves
+            for (let i = searchWaves.length - 1; i >= 0; i--) {
+                const wave = searchWaves[i];
+                wave.update();
+                wave.draw(ctx);
+
+                ghosts.forEach(ghost => {
+                    const dist = Math.hypot(ghost.x - wave.x, ghost.y - wave.y);
+                    if (Math.abs(dist - wave.radius) < wave.speed + 15) {
+                        if (ghost.searchGlowTimer <= 0) {
+                            ghost.searchGlowTimer = 220;
+                            playSound('ghost_found');
+                        }
+                    }
+                });
+
+                if (bossGhost) {
+                    const dist = Math.hypot(bossGhost.x - wave.x, bossGhost.y - wave.y);
+                    if (Math.abs(dist - wave.radius) < wave.speed + 15) {
+                        if (bossGhost.searchGlowTimer <= 0) {
+                            bossGhost.searchGlowTimer = 220;
+                            playSound('ghost_found');
+                        }
+                    }
+                }
+
+                if (wave.alpha <= 0) searchWaves.splice(i, 1);
+            }
+
+            // 5. Update & Draw Ghosts
+            ghosts.forEach(ghost => {
+                if (gameState === 'PLAYING') ghost.update();
+                const distToLight = Math.hypot(ghost.x - player.smoothX, ghost.y - player.smoothY);
+                const isInsideLight = distToLight < player.radius;
+                ghost.draw(ctx, isInsideLight);
+            });
+
+            if (bossGhost) {
+                if (gameState === 'PLAYING') bossGhost.update();
+                const distToLight = Math.hypot(bossGhost.x - player.smoothX, bossGhost.y - player.smoothY);
+                const isInsideLight = distToLight < player.radius;
+                bossGhost.draw(ctx, isInsideLight);
+            }
+
+            // 6. Update & Draw Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update();
+                particles[i].draw(ctx);
+                if (particles[i].alpha <= 0) particles.splice(i, 1);
+            }
+
+            // 7. Voice Wave Ring
+            drawEcgRing(ctx, player.smoothX, player.smoothY, player.radius, currentMicVolume);
+
+            // 8. Hover accessibility
+            handleHoverClick();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function drawEcgRing(targetCtx, x, y, radius, volume) {
+            targetCtx.save();
+            targetCtx.strokeStyle = '#38bdf8';
+            targetCtx.lineWidth = 3.5;
+            targetCtx.shadowColor = '#06b6d4';
+            targetCtx.shadowBlur = 14;
+
+            const segments = 60;
+            const volAmp = Math.min((volume / 40) * 25, 45);
+
+            targetCtx.beginPath();
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                
+                let rOffset = 0;
+                if (i % 8 === 0) {
+                    rOffset = (Math.random() - 0.3) * volAmp;
+                }
+
+                const px = x + Math.cos(angle) * (radius + rOffset);
+                const py = y + Math.sin(angle) * (radius + rOffset);
+
+                if (i === 0) targetCtx.moveTo(px, py);
+                else targetCtx.lineTo(px, py);
+            }
+            targetCtx.closePath();
+            targetCtx.stroke();
+            targetCtx.restore();
+        }
+
+        function triggerSearchWave(volume) {
+            searchWaves.push(new SearchWave(player.smoothX, player.smoothY, volume));
+            player.searchGauge = 0;
+            playSound('search_pulse');
+        }
+
+        let hoverTarget = null;
+        let hoverTimer = 0;
+
+        function handleHoverClick() {
+            let currentOver = null;
+
+            if (gameState === 'TITLE') {
+                const rect = btnStartGame.getBoundingClientRect();
+                if (player.smoothX >= rect.left && player.smoothX <= rect.right &&
+                    player.smoothY >= rect.top && player.smoothY <= rect.bottom) {
+                    currentOver = 'START';
+                }
+            } else if (gameState === 'END') {
+                const rect = btnRestartGame.getBoundingClientRect();
+                if (player.smoothX >= rect.left && player.smoothX <= rect.right &&
+                    player.smoothY >= rect.top && player.smoothY <= rect.bottom) {
+                    currentOver = 'RESTART';
+                }
+            }
+
+            if (currentOver) {
+                if (hoverTarget === currentOver) {
+                    hoverTimer += 0.016;
+                    const progress = Math.min(1.0, hoverTimer / 2.0);
+
+                    const dashoffset = 289 * (1.0 - progress);
+                    if (currentOver === 'START') hoverCircleStart.style.strokeDashoffset = dashoffset;
+                    else hoverCircleRestart.style.strokeDashoffset = dashoffset;
+
+                    if (progress >= 1.0) {
+                        if (currentOver === 'START') btnStartGame.click();
+                        else btnRestartGame.click();
+                        resetHoverProgress();
+                    }
+                } else {
+                    hoverTarget = currentOver;
+                    hoverTimer = 0;
+                }
+            } else {
+                resetHoverProgress();
+            }
+        }
+
+        function resetHoverProgress() {
+            hoverTarget = null;
+            hoverTimer = 0;
+            if (hoverCircleStart) hoverCircleStart.style.strokeDashoffset = 289;
+            if (hoverCircleRestart) hoverCircleRestart.style.strokeDashoffset = 289;
+        }
+
+        sliderSensitivity.addEventListener('input', (e) => {
+            sensitivity = parseFloat(e.target.value);
+            valSensitivity.innerText = `${sensitivity.toFixed(1)}x`;
+        });
+
+        sliderLightRadius.addEventListener('input', (e) => {
+            const radius = parseInt(e.target.value, 10);
+            player.radius = radius;
+            valLightRadius.innerText = `${radius}px`;
+        });
+
+        sliderGameTime.addEventListener('input', (e) => {
+            gameDuration = parseInt(e.target.value, 10);
+            valGameTime.innerText = `${gameDuration}秒`;
+            
+            const maxBossTime = Math.max(5, gameDuration - 5);
+            sliderBossSpawnTime.max = maxBossTime;
+            if (bossSpawnTime > maxBossTime) {
+                bossSpawnTime = maxBossTime;
+                sliderBossSpawnTime.value = bossSpawnTime;
+                valBossSpawnTime.innerText = `${bossSpawnTime}秒`;
+            }
+        });
+
+        sliderBossSpawnTime.addEventListener('input', (e) => {
+            bossSpawnTime = parseInt(e.target.value, 10);
+            valBossSpawnTime.innerText = `${bossSpawnTime}秒`;
+        });
+
+        sliderGhostSoftness.addEventListener('input', (e) => {
+            ghostSoftness = parseFloat(e.target.value);
+            let label = '';
+            if (ghostSoftness <= 1.0) label = ' (手ごわい)';
+            else if (ghostSoftness <= 3.0) label = ' (やわらか)';
+            else if (ghostSoftness <= 6.0) label = ' (とてもやわらか)';
+            else label = ' (超やわらか・一瞬)';
+            valGhostSoftness.innerText = `${ghostSoftness.toFixed(1)}x${label}`;
+        });
+
+        sliderMicThreshold.addEventListener('input', (e) => {
+            micThreshold = parseInt(e.target.value, 10);
+            valMicThreshold.innerText = micThreshold;
+            const percentage = (micThreshold / 80) * 100;
+            micThresholdLine.style.left = `${Math.min(95, percentage)}%`;
+        });
+
+        sliderBgmVolume.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            bgmVolume = val / 100;
+            valBgmVolume.innerText = `${val}%`;
+            bgmAudio.volume = bgmVolume; // Immediate volume update
+        });
+
+        sliderSeVolume.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value, 10);
+            seVolume = val / 100;
+            valSeVolume.innerText = `${val}%`;
+        });
+
+        btnCalibrate.addEventListener('click', (e) => {
+            e.stopPropagation();
+            calibrationCenter.x = faceCoords.x;
+            calibrationCenter.y = faceCoords.y;
+            playSound('hit');
+        });
+
+        btnModeCamera.addEventListener('click', (e) => {
+            e.stopPropagation();
+            isCameraControl = true;
+            btnModeCamera.className = "py-3 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40";
+            btnModeMouse.className = "py-3 px-4 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-slate-200 transition flex items-center justify-center gap-2";
+            const spinner = document.getElementById('cameraLoadingSpinner');
+            if (spinner && webcam.readyState < 2) {
+                spinner.classList.remove('hidden');
+            }
+        });
+
+        btnModeMouse.addEventListener('click', (e) => {
+            e.stopPropagation();
+            switchToMouseMode();
+        });
+
+        btnStartGame.addEventListener('click', (e) => {
+            e.stopPropagation();
+            triggerCountdown();
+        });
+
+        btnRestartGame.addEventListener('click', (e) => {
+            e.stopPropagation();
+            goToTitle();
+        });
+
+        window.onload = () => {
+            const updateCanvasSize = () => {
+                canvas.width = Math.max(1, window.innerWidth || 800);
+                canvas.height = Math.max(1, window.innerHeight || 600);
+            };
+            updateCanvasSize();
+            faceFeedbackCanvas.width = 320;
+            faceFeedbackCanvas.height = 240;
+
+            setupFaceMesh();
+
+            window.addEventListener('resize', updateCanvasSize);
+            window.addEventListener('orientationchange', () => {
+                setTimeout(updateCanvasSize, 200);
+            });
+
+            // iPad Initial User Interaction Listener
+            const initUserInteraction = () => {
+                initAudio();
+                setupMicrophone();
+                if (gameState === 'TITLE' && currentBgmMode !== 'TITLE') {
+                    startBGM('TITLE');
+                }
+            };
+
+            document.body.addEventListener('click', initUserInteraction, { once: true });
+            document.body.addEventListener('touchstart', initUserInteraction, { once: true });
+
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.smoothX = canvas.width / 2;
+            player.smoothY = canvas.height / 2;
+
+            gameLoop();
+        };
+    </script>
+</body>
+</html>
